@@ -1,0 +1,76 @@
+#!/bin/bash
+# written by Ali Osman Acar // contact:aliacar[at]etu.edu.tr
+# The configuration script that creates input files for a 2D PMF calc.
+# It creates the pdb files for cations from the trajectory files.If you 
+# want to manually create the pdb files for cations please copy them to
+# directory called tempfiles/cationpdbs and set the create_cation_files
+# option as "no" in the input.ini file.	
+
+CONFFILE=input.ini #configuration file
+WRKDIR="$(pwd)"
+INPTCL=$WRKDIR/config/finderall.tcl
+INDEXTCL=$WRKDIR/config/grepindex.tcl
+CATDCDPATH=$WRKDIR/bin
+OFILE21=vmdout21
+FILEDIR="$(grep "path=" $CONFFILE | cut -d "=" -f 2)"
+CONFIGURATION="$(grep "create_cation_files=" $CONFFILE | cut -d "=" -f 2)"
+FILETYPE="$(grep "trajectory_file_type" $CONFFILE | cut -d "=" -f 2)"
+FRAMENUMBER="$(grep "number_of_frames_per_read" $CONFFILE | cut -d "=" -f 2)"
+PARAMETERFILE="$(grep "name_of_your_parameter_file" $CONFFILE | cut -d "=" -f 2)"
+PARAMETERFILETYPE="$(grep "parameter_file_type" $CONFFILE | cut -d "=" -f 2)"
+CATIONSIZE="$(grep "number_of_cations_in_system" $CONFFILE | cut -d "=" -f 2)"
+CATIONTYPE="$(grep "cation_type" $CONFFILE | cut -d "=" -f 2)"
+RESOLUTION="$(grep "resolution" $CONFFILE | cut -d "=" -f 2)"
+MINX="$(grep "min_x_coordinate" $CONFFILE | cut -d "=" -f 2)"
+MAXX="$(grep "max_x_coordinate" $CONFFILE | cut -d "=" -f 2)"
+MINY="$(grep "min_y_coordinate" $CONFFILE | cut -d "=" -f 2)"
+MAXY="$(grep "max_y_coordinate" $CONFFILE | cut -d "=" -f 2)"
+MINZ="$(grep "min_z_coordinate" $CONFFILE | cut -d "=" -f 2)"
+MAXZ="$(grep "max_z_coordinate" $CONFFILE | cut -d "=" -f 2)"
+ls $FILEDIR/*$FILETYPE > $WRKDIR/config/dcdinp
+NUMBEROFTRAJFILES="$(wc -l $WRKDIR/config/dcdinp | awk '{ print $1 }')"
+echo "# of traj files=$NUMBEROFTRAJFILES"
+if [ "$CONFIGURATION" == "yes" ]; then
+mkdir $WRKDIR/tempfiles/cationpdbs
+TEMPPDBPATH=$WRKDIR/tempfiles/cationpdbs
+LOADSINGLEFILE="$(sed "${1}q;d" $WRKDIR/config/dcdinp)"
+echo "set tempdir $WRKDIR/config" > index.tcl
+echo "set trajload $LOADSINGLEFILE" >> index.tcl
+echo "set cations $CATIONTYPE" >> index.tcl
+echo "set psfload $FILEDIR/$PARAMETERFILE" >> index.tcl
+cat $INDEXTCL >> index.tcl
+vmd -dispdev text -e index.tcl
+echo "$FILEDIR/$PARAMETERFILE"
+for (( m=1; m<=$NUMBEROFTRAJFILES ; m=m+1 ))
+do
+	LOADFILE="$(sed "${m}q;d" $WRKDIR/config/dcdinp)"
+	$CATDCDPATH/catdcd -o ${TEMPPDBPATH}/${CATIONTYPE}${m}.pdb -otype pdb \
+		-i ${WRKDIR}/config/temp.inp -stype ${PARAMETERFILETYPE} -s ${FILEDIR}/${PARAMETERFILE} \
+		-first 0 -last $FRAMENUMBER -${FILETYPE} $LOADFILE
+done
+fi
+rm $WRKDIR/index.tcl
+rm $WRKDIR/src/density_dist.inp
+ls $WRKDIR/tempfiles/cationpdbs/*pdb > $WRKDIR/tempfiles/pdbpaths
+PDBFILES="$(ls -1q $WRKDIR/tempfiles/cationpdbs/*pdb | wc -l)"
+while IFS= read -r line1
+do
+	echo "'$line1'" >> $WRKDIR/src/density_dist.inp
+done < "$WRKDIR/tempfiles/pdbpaths"
+
+#creating main.inp
+echo "$PDBFILES" > $WRKDIR/src/main.inp
+echo "$FRAMENUMBER" >> $WRKDIR/src/main.inp
+echo "$CATIONSIZE" >> $WRKDIR/src/main.inp
+echo "$RESOLUTION" >> $WRKDIR/src/main.inp
+echo "$MINX" >> $WRKDIR/src/main.inp
+echo "$MAXX" >> $WRKDIR/src/main.inp
+echo "$MINY" >> $WRKDIR/src/main.inp
+echo "$MAXY" >> $WRKDIR/src/main.inp
+echo "$MINZ" >> $WRKDIR/src/main.inp
+echo "$MAXZ" >> $WRKDIR/src/main.inp
+#creating gnuplot script
+
+echo "###################################"
+echo "Input files are successfully created"
+echo "###################################"
